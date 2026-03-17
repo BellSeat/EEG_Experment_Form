@@ -1,42 +1,84 @@
-# sv
+# SPANER Lab Portal
 
-Everything you need to build a Svelte project, powered by [`sv`](https://github.com/sveltejs/cli).
+A SvelteKit prototype for the SPANER Lab login portal.
 
-## Creating a project
+The current homepage is a two-column login layout with:
 
-If you're seeing this, you've probably already done this step. Congrats!
+- a left-side authentication panel
+- a right-side visual panel with navigation
+- a centered desktop layout capped at `1024px` wide
+- responsive stacking behavior on smaller screens
+
+## Tech Stack
+
+- SvelteKit
+- Svelte 5
+- TypeScript
+- Vite
+- Prettier with `prettier-plugin-svelte`
+
+## Getting Started
+
+Install dependencies:
 
 ```sh
-# create a new project
-npx sv create my-app
+npm install
 ```
 
-To recreate this project with the same configuration:
-
-```sh
-# recreate this project
-npx sv@0.12.7 create --template minimal --types ts --install npm spaner
-```
-
-## Developing
-
-Once you've created a project and installed dependencies with `npm install` (or `pnpm install` or `yarn`), start a development server:
+Start the development server:
 
 ```sh
 npm run dev
-
-# or start the server and open the app in a new browser tab
-npm run dev -- --open
 ```
 
-## Building
+Run type and Svelte checks:
 
-To create a production version of your app:
+```sh
+npm run check
+```
+
+Build for production:
 
 ```sh
 npm run build
 ```
 
-You can preview the production build with `npm run preview`.
+Preview the production build:
 
-> To deploy your app, you may need to install an [adapter](https://svelte.dev/docs/kit/adapters) for your target environment.
+```sh
+npm run preview
+```
+
+## Project Structure
+
+```text
+src/
+  routes/
+    +layout.svelte
+    +page.svelte
+    dashboard/
+      +page.svelte
+```
+
+- `src/routes/+page.svelte`
+  Main landing page for the portal login experience.
+- `src/routes/dashboard/+page.svelte`
+  Simple placeholder dashboard page.
+
+## Formatting
+
+Prettier is configured in `.prettierrc`.
+
+Ignored files and generated folders are listed in `.prettierignore`, including:
+
+- `node_modules`
+- `.svelte-kit`
+- `build`
+- deployment output folders
+- `package-lock.json`
+
+## Notes
+
+- The login form is currently a UI prototype only.
+- The submit handler prevents a full page refresh.
+- The illustration area on the right is a placeholder and can be replaced with a real image or SVG later.
