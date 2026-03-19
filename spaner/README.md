@@ -1,84 +1,49 @@
 # SPANER Lab Portal
 
-A SvelteKit prototype for the SPANER Lab login portal.
+A SvelteKit frontend for the SPANER Lab research portal.
 
-The current homepage is a two-column login layout with:
+## Environment
 
-- a left-side authentication panel
-- a right-side visual panel with navigation
-- a centered desktop layout capped at `1024px` wide
-- responsive stacking behavior on smaller screens
+Set `VITE_API_BASE` so the frontend and backend point at the same API origin.
 
-## Tech Stack
-
-- SvelteKit
-- Svelte 5
-- TypeScript
-- Vite
-- Prettier with `prettier-plugin-svelte`
-
-## Getting Started
-
-Install dependencies:
+Development example:
 
 ```sh
-npm install
+VITE_API_BASE=http://localhost:8000
 ```
 
-Start the development server:
+Production example:
 
 ```sh
-npm run dev
+VITE_API_BASE=https://api.example.com
 ```
 
-Run type and Svelte checks:
+Backend CORS should allow the matching frontend origin for each environment, for example:
 
-```sh
-npm run check
-```
+- dev frontend `http://localhost:5173` -> dev API `http://localhost:8000`
+- prod frontend `https://portal.example.com` -> prod API `https://api.example.com`
 
-Build for production:
+## Routes
 
-```sh
-npm run build
-```
+- `/` login
+- `/dashboard`
+- `/subjects`
+- `/sessions`
+- `/sessions/[id]`
+- `/session_files`
+- `/audit-log`
 
-Preview the production build:
+## API expectations
 
-```sh
-npm run preview
-```
+The frontend currently calls these endpoints:
 
-## Project Structure
+- `POST /auth/login`
+- `GET /subjects`
+- `GET /sessions`
+- `GET /sessions/:id`
+- `GET /sessions/:id/files`
+- `POST /sessions/:id/files`
+- `GET /session_files`
+- `GET /audit-log`
 
-```text
-src/
-  routes/
-    +layout.svelte
-    +page.svelte
-    dashboard/
-      +page.svelte
-```
-
-- `src/routes/+page.svelte`
-  Main landing page for the portal login experience.
-- `src/routes/dashboard/+page.svelte`
-  Simple placeholder dashboard page.
-
-## Formatting
-
-Prettier is configured in `.prettierrc`.
-
-Ignored files and generated folders are listed in `.prettierignore`, including:
-
-- `node_modules`
-- `.svelte-kit`
-- `build`
-- deployment output folders
-- `package-lock.json`
-
-## Notes
-
-- The login form is currently a UI prototype only.
-- The submit handler prevents a full page refresh.
-- The illustration area on the right is a placeholder and can be replaced with a real image or SVG later.
+Collection endpoints can return either a raw array or an object with `items`, `results`, or `data`.
