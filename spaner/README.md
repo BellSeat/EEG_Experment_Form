@@ -2,6 +2,35 @@
 
 A SvelteKit frontend for the SPANER Lab research portal.
 
+## Quick start on a clean Mac or Windows machine
+
+If someone is starting from a blank machine, read:
+
+- [docs/requirements.md](./docs/requirements.md)
+
+Short version:
+
+macOS:
+
+```sh
+xcode-select --install
+cd spaner
+npm install
+cp .env.example .env
+npm run dev
+```
+
+Windows PowerShell:
+
+```powershell
+cd spaner
+npm install
+Copy-Item .env.example .env
+npm run dev
+```
+
+Set `VITE_API_BASE` in `.env` before logging in.
+
 ## Current scope
 
 The portal currently covers the core research workspace:
@@ -86,6 +115,27 @@ Backend CORS should allow the matching frontend origin for each environment, for
 - dev frontend `http://localhost:5173` -> dev API `http://localhost:8000`
 - prod frontend `https://portal.example.com` -> prod API `https://api.example.com`
 
+## Local development
+
+Install dependencies:
+
+```sh
+npm install
+```
+
+Start the development server:
+
+```sh
+npm run dev
+```
+
+Run project checks:
+
+```sh
+npm run check
+npm run build
+```
+
 ## API expectations
 
 The frontend currently calls these endpoint families:
@@ -128,4 +178,5 @@ Collection endpoints can return either:
 ## Docs
 
 - [docs/color.md](./docs/color.md)
+- [docs/requirements.md](./docs/requirements.md)
 - [docs/roadmap.md](./docs/roadmap.md)
