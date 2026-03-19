@@ -358,6 +358,14 @@ select {
 	letter-spacing: 0.08em;
 }
 
+.overview-status-editor {
+	display: grid;
+	grid-template-columns: minmax(220px, 320px) auto;
+	align-items: end;
+	gap: 1rem;
+	margin-top: 1.1rem;
+}
+
 .upload-form {
 	display: grid;
 	gap: 1rem;
@@ -743,10 +751,34 @@ select {
 	color: var(--color-deep-violet);
 }
 
+.asset-record-composer {
+	display: grid;
+	gap: 1rem;
+	margin-bottom: 1rem;
+}
+
+.section-divider {
+	height: 1px;
+	margin: 1.25rem 0;
+	background: linear-gradient(90deg, transparent, rgba(183, 165, 122, 0.5), transparent);
+}
+
 .session-file-metadata-grid {
 	display: grid;
 	grid-template-columns: repeat(4, minmax(0, 1fr));
 	gap: 0.75rem;
+}
+
+.session-file-metadata-span-2 {
+	grid-column: span 2;
+}
+
+.truncated-inline {
+	display: inline-block;
+	max-width: 100%;
+	overflow: hidden;
+	text-overflow: ellipsis;
+	white-space: nowrap;
 }
 
 .export-card {
@@ -1005,6 +1037,7 @@ select {
 	.eeg-workbench,
 	.steps-layout,
 	.data-link-grid,
+	.overview-status-editor,
 	.session-file-filter-grid,
 	.session-file-metadata-grid {
 		grid-template-columns: 1fr;

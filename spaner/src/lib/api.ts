@@ -267,6 +267,40 @@ export async function getSessionFiles(sessionId?: EntityId): Promise<ApiListResp
 	return normalizeListResponse(await apiFetch<ListPayload<SessionFile>>(path));
 }
 
+export async function getAllSessionFiles(): Promise<ApiListResponse<SessionFile>> {
+	try {
+		const response = await getSessionFiles();
+		if (response.items.length > 0) {
+			return response;
+		}
+	} catch (error) {
+		if (!(error instanceof ApiError) || error.status !== 404) {
+			throw error;
+		}
+	}
+
+	const sessions = await getSessions();
+	const fileLists = await Promise.all(
+		sessions.items.map(async (session) => {
+			try {
+				const response = await getSessionFiles(session.id);
+				return response.items;
+			} catch (error) {
+				if (error instanceof ApiError && error.status === 404) {
+					return [];
+				}
+				throw error;
+			}
+		}),
+	);
+
+	const items = fileLists.flat();
+	return {
+		items,
+		total: items.length,
+	};
+}
+
 export async function uploadSessionFile(
 	sessionId: EntityId,
 	payload: SessionFileUploadPayload,
@@ -380,6 +414,47 @@ export async function getExperimentData(experimentPlanId?: EntityId): Promise<Ap
 			? '/experiment-data'
 			: `/experiment-data?experiment_plan=${encodeURIComponent(String(experimentPlanId))}`;
 	return normalizeListResponse(await apiFetch<ListPayload<ExperimentData>>(path));
+}
+
+export async function getAllExperimentData(): Promise<ApiListResponse<ExperimentData>> {
+	try {
+		const response = await getExperimentData();
+		if (response.items.length > 0) {
+			return response;
+		}
+	} catch (error) {
+		if (!(error instanceof ApiError) || error.status !== 404) {
+			throw error;
+		}
+	}
+
+	const sessions = await getSessions();
+	const planIds = [
+		...new Set(
+			sessions.items
+				.map((session) => session.experiment_plan_id)
+				.filter((planId): planId is EntityId => planId !== null && planId !== undefined),
+		),
+	];
+	const recordLists = await Promise.all(
+		planIds.map(async (planId) => {
+			try {
+				const response = await getExperimentData(planId);
+				return response.items;
+			} catch (error) {
+				if (error instanceof ApiError && error.status === 404) {
+					return [];
+				}
+				throw error;
+			}
+		}),
+	);
+
+	const items = [...new Map(recordLists.flat().map((record) => [String(record.id), record])).values()];
+	return {
+		items,
+		total: items.length,
+	};
 }
 
 export async function createExperimentData(

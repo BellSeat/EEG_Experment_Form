@@ -1,17 +1,23 @@
 <script lang="ts">
 	import { onMount } from 'svelte';
+	import { currentUser } from '$lib/auth';
 	import EegPlanEditor from '$lib/components/EegPlanEditor.svelte';
-	import ExperimentDataEditor from '$lib/components/ExperimentDataEditor.svelte';
 	import ExperimentStepsEditor from '$lib/components/ExperimentStepsEditor.svelte';
 	import {
+		createExperimentData,
+		createExperimentPlan,
+		deleteExperimentData,
 		deleteSessionFile,
+		getExperimentData,
 		getSession,
 		getSessionFileLink,
 		getSessionFiles,
+		updateExperimentData,
+		updateSession,
 		updateSessionFile,
 		uploadSessionFile,
 	} from '$lib/api';
-	import type { Session, SessionFile } from '$lib/types';
+	import type { EntityId, ExperimentData, Session, SessionFile } from '$lib/types';
 
 	type FileMetadataDraft = {
 		file_type: string;
@@ -21,13 +27,27 @@
 
 	const PROCESSING_STAGE_OPTIONS = ['raw', 'preprocessed', 'derived', 'exported'];
 	const QC_STATUS_OPTIONS = ['pending', 'passed', 'failed', 'needs_review'];
+	const SESSION_STATUS_OPTIONS: Session['status'][] = [
+		'planned',
+		'recording',
+		'processing',
+		'completed',
+		'archived',
+		'in_progress',
+		'failed',
+	];
 
 	let { data } = $props<{ data: { sessionId: string } }>();
 
 	let session = $state<Session | null>(null);
 	let files = $state<SessionFile[]>([]);
+	let records = $state<ExperimentData[]>([]);
 	let isLoading = $state(true);
+	let isLoadingRecords = $state(false);
 	let isUploading = $state(false);
+	let isCreatingPlan = $state(false);
+	let isCreatingRecord = $state(false);
+	let isSavingStatus = $state(false);
 	let isDragActive = $state(false);
 	let selectedFile = $state<File | null>(null);
 	let fileType = $state('raw_eeg');
@@ -37,14 +57,22 @@
 	let uploadMessage = $state('');
 	let fileMessage = $state('');
 	let fileError = $state('');
+	let recordMessage = $state('');
+	let recordError = $state('');
+	let statusMessage = $state('');
+	let statusError = $state('');
 	let fileSearch = $state('');
 	let fileTypeFilter = $state('all');
 	let stageFilter = $state('all');
 	let qcFilter = $state('all');
+	let draftRecordLocation = $state('');
+	let statusDraft = $state<Session['status']>('planned');
 	let editingFileId = $state<string | number | null>(null);
 	let savingFileId = $state<string | number | null>(null);
 	let deletingFileId = $state<string | number | null>(null);
 	let metadataDrafts = $state<Record<string, FileMetadataDraft>>({});
+	let savingRecordIds = $state<Record<string, boolean>>({});
+	let deletingRecordIds = $state<Record<string, boolean>>({});
 	const uploadSuccessMessage = 'Upload completed. The file list has been refreshed.';
 
 	function getSessionLabel(currentSession: Session | null) {
@@ -53,6 +81,10 @@
 
 	function getFileName(file: SessionFile) {
 		return file.file_name ?? file.original_filename ?? file.filename;
+	}
+
+	function looksLikeUrl(value: string): boolean {
+		return /^https?:\/\//i.test(value.trim());
 	}
 
 	function formatDate(value?: string | null) {
@@ -157,18 +189,67 @@
 		});
 	}
 
+	function setSavingRecord(dataId: EntityId, value: boolean) {
+		savingRecordIds = {
+			...savingRecordIds,
+			[String(dataId)]: value,
+		};
+	}
+
+	function setDeletingRecord(dataId: EntityId, value: boolean) {
+		deletingRecordIds = {
+			...deletingRecordIds,
+			[String(dataId)]: value,
+		};
+	}
+
+	function setRecordPath(dataId: EntityId, value: string) {
+		records = records.map((record) =>
+			record.id === dataId
+				? {
+						...record,
+						file_path: value,
+					}
+				: record,
+		);
+	}
+
+	async function loadRecords(planId: EntityId | null | undefined = session?.experiment_plan_id) {
+		if (!planId) {
+			records = [];
+			return;
+		}
+
+		isLoadingRecords = true;
+		recordError = '';
+
+		try {
+			const response = await getExperimentData(planId);
+			records = response.items;
+		} catch (error) {
+			recordError = error instanceof Error ? error.message : 'Unable to load external records.';
+		} finally {
+			isLoadingRecords = false;
+		}
+	}
+
 	async function loadSessionPage() {
 		isLoading = true;
 		errorMessage = '';
 
 		try {
-			const [sessionResponse, filesResponse] = await Promise.all([
-				getSession(data.sessionId),
-				getSessionFiles(data.sessionId),
-			]);
-
+			const sessionResponse = await getSession(data.sessionId);
 			session = sessionResponse;
+			statusDraft = sessionResponse.status;
+
+			const filesResponse = await getSessionFiles(data.sessionId);
 			files = filesResponse.items;
+
+			if (sessionResponse.experiment_plan_id) {
+				await loadRecords(sessionResponse.experiment_plan_id);
+			} else {
+				records = [];
+			}
 		} catch (error) {
 			errorMessage = error instanceof Error ? error.message : 'Unable to load session details.';
 		} finally {
@@ -210,7 +291,8 @@
 			});
 			selectedFile = null;
 			uploadMessage = uploadSuccessMessage;
-			await loadSessionPage();
+			const filesResponse = await getSessionFiles(data.sessionId);
+			files = filesResponse.items;
 		} catch (error) {
 			uploadMessage = error instanceof Error ? error.message : 'Upload failed.';
 		} finally {
@@ -267,7 +349,159 @@
 		}
 	}
 
+	async function ensurePlanForRecords(): Promise<EntityId | null> {
+		if (session?.experiment_plan_id) {
+			return session.experiment_plan_id;
+		}
+
+		if (!$currentUser || !session) {
+			recordError = 'A signed-in researcher and an active session are required before adding external records.';
+			return null;
+		}
+
+		isCreatingPlan = true;
+		recordError = '';
+
+		try {
+			const createdPlan = await createExperimentPlan({
+				owner_id: $currentUser.id,
+				name: `${getSessionLabel(session)} Plan`,
+				description: `Session assets for session ${session.id}.`,
+			});
+
+			const updatedSession = await updateSession(session.id, {
+				experiment_plan_id: createdPlan.id,
+			});
+
+			session = updatedSession;
+			recordMessage = 'Created and linked an experiment plan so external records can be stored.';
+			return createdPlan.id;
+		} catch (error) {
+			recordError = error instanceof Error ? error.message : 'Unable to create an experiment plan for records.';
+			return null;
+		} finally {
+			isCreatingPlan = false;
+		}
+	}
+
+	async function addRecord() {
+		const planId = await ensurePlanForRecords();
+		if (!planId) {
+			return;
+		}
+
+		if (!$currentUser) {
+			recordError = 'A signed-in researcher is required before adding an external record.';
+			return;
+		}
+
+		if (!draftRecordLocation.trim()) {
+			recordError = 'Enter a URL or path before adding a record.';
+			return;
+		}
+
+		isCreatingRecord = true;
+		recordError = '';
+		recordMessage = '';
+
+		try {
+			const created = await createExperimentData({
+				owner_id: $currentUser.id,
+				file_path: draftRecordLocation.trim(),
+				experiment_plan: planId,
+			});
+			records = [...records, created];
+			draftRecordLocation = '';
+			recordMessage = 'Added a new external record.';
+		} catch (error) {
+			recordError = error instanceof Error ? error.message : 'Unable to add the external record.';
+		} finally {
+			isCreatingRecord = false;
+		}
+	}
+
+	async function saveRecord(dataId: EntityId) {
+		const target = records.find((record) => record.id === dataId);
+		if (!target) {
+			return;
+		}
+
+		if (!target.file_path.trim()) {
+			recordError = 'The URL/path field cannot be empty.';
+			return;
+		}
+
+		setSavingRecord(dataId, true);
+		recordError = '';
+		recordMessage = '';
+
+		try {
+			const updated = await updateExperimentData(dataId, {
+				file_path: target.file_path.trim(),
+			});
+			records = records.map((record) => (record.id === dataId ? updated : record));
+			recordMessage = 'Updated the external record.';
+		} catch (error) {
+			recordError = error instanceof Error ? error.message : 'Unable to update the external record.';
+		} finally {
+			setSavingRecord(dataId, false);
+		}
+	}
+
+	async function removeRecord(dataId: EntityId) {
+		setDeletingRecord(dataId, true);
+		recordError = '';
+		recordMessage = '';
+
+		try {
+			await deleteExperimentData(dataId);
+			records = records.filter((record) => record.id !== dataId);
+			recordMessage = 'Deleted the external record.';
+		} catch (error) {
+			recordError = error instanceof Error ? error.message : 'Unable to delete the external record.';
+		} finally {
+			setDeletingRecord(dataId, false);
+		}
+	}
+
+	async function saveSessionStatus() {
+		if (!session) {
+			return;
+		}
+
+		if (statusDraft === session.status) {
+			statusMessage = 'Session status is already up to date.';
+			statusError = '';
+			return;
+		}
+
+		isSavingStatus = true;
+		statusMessage = '';
+		statusError = '';
+
+		try {
+			const updatedSession = await updateSession(session.id, {
+				status: statusDraft,
+			});
+			session = updatedSession;
+			statusDraft = updatedSession.status;
+			statusMessage = `Updated session status to ${updatedSession.status}.`;
+		} catch (error) {
+			statusError = error instanceof Error ? error.message : 'Unable to update the session status.';
+		} finally {
+			isSavingStatus = false;
+		}
+	}
+
 	onMount(loadSessionPage);
+
+	$effect(() => {
+		const planId = session?.experiment_plan_id ?? null;
+		void planId;
+		if (session) {
+			void loadRecords(planId);
+		}
+	});
 </script>
 
 <svelte:head>
@@ -279,7 +513,7 @@
 		<p class="eyebrow">Session Detail</p>
 		<h2>{getSessionLabel(session)}</h2>
 		<p class="page-copy">
-			Experiment planning, EEG channel alignment, session files, and external data links now share one workspace.
+			Experiment planning, EEG channel alignment, managed session files, and external records now share one workspace.
 		</p>
 	</div>
 </section>
@@ -319,6 +553,36 @@
 				<strong>{session?.experiment_plan_id ?? 'Not linked'}</strong>
 			</div>
 		</div>
+
+		<div class="overview-status-editor">
+			<label class="form-field">
+				<span>Update status</span>
+				<select bind:value={statusDraft} disabled={!session || isSavingStatus}>
+					{#each SESSION_STATUS_OPTIONS as option}
+						<option value={option}>{option}</option>
+					{/each}
+				</select>
+			</label>
+
+			<div class="form-actions">
+				<button
+					type="button"
+					class="primary-button"
+					onclick={saveSessionStatus}
+					disabled={!session || isSavingStatus}
+				>
+					{isSavingStatus ? 'Saving status...' : 'Save status'}
+				</button>
+			</div>
+		</div>
+
+		{#if statusMessage}
+			<p class="status-banner">{statusMessage}</p>
+		{/if}
+
+		{#if statusError}
+			<p class="status-banner error">{statusError}</p>
+		{/if}
 	</article>
 
 	<article class="content-card">
@@ -351,8 +615,8 @@
 				/>
 				<strong>{selectedFile ? selectedFile.name : 'Drop a file here or click to browse'}</strong>
 				<span>
-					Session files are for assets the platform manages directly. This can later coexist with
-					server-generated download links.
+					Session files are for assets the platform manages directly. They can later resolve to server-hosted
+					download links.
 				</span>
 			</label>
 
@@ -407,14 +671,7 @@
 	sessionId={data.sessionId}
 	onSessionPatched={(nextSession) => {
 		session = nextSession;
-	}}
-/>
-
-<ExperimentDataEditor
-	session={session}
-	sessionId={data.sessionId}
-	onSessionPatched={(nextSession) => {
-		session = nextSession;
+		statusDraft = nextSession.status;
 	}}
 />
 
@@ -423,17 +680,22 @@
 	sessionId={data.sessionId}
 	onSessionPatched={(nextSession) => {
 		session = nextSession;
+		statusDraft = nextSession.status;
 	}}
 />
 
 <section class="content-card">
 	<div class="section-heading">
 		<div>
-			<p class="eyebrow">Session Files</p>
-			<h3>{isLoading ? 'Loading...' : `${files.length} managed file record${files.length === 1 ? '' : 's'}`}</h3>
+			<p class="eyebrow">Session Assets</p>
+			<h3>
+				{isLoading
+					? 'Loading...'
+					: `${files.length} managed file${files.length === 1 ? '' : 's'} · ${records.length} external record${records.length === 1 ? '' : 's'}`}
+			</h3>
 			<p class="page-copy">
-				Use this area for files the platform owns directly, including upload, metadata cleanup, deletion,
-				and eventual server-hosted download links.
+				Managed uploads and external URL/path records now live together here, so the full asset picture stays on
+				one page.
 			</p>
 		</div>
 	</div>
@@ -484,7 +746,7 @@
 	{/if}
 
 	{#if !getFilteredFiles().length && !isLoading}
-		<p class="empty-state">No session files match the current filters yet.</p>
+		<p class="empty-state">No managed session files match the current filters yet.</p>
 	{:else}
 		<div class="session-file-list">
 			{#each getFilteredFiles() as file (file.id)}
@@ -560,7 +822,9 @@
 						</div>
 						<div class="step-summary-item">
 							<span>Storage</span>
-							<strong>{file.download_url ?? file.storage_path ?? 'Pending link'}</strong>
+							<strong class="truncated-inline" title={file.download_url ?? file.storage_path ?? 'Pending link'}>
+								{file.download_url ?? file.storage_path ?? 'Pending link'}
+							</strong>
 						</div>
 					</div>
 
@@ -603,6 +867,128 @@
 							</label>
 						</div>
 					{/if}
+				</article>
+			{/each}
+		</div>
+	{/if}
+
+	<div class="section-divider"></div>
+
+	<div class="section-heading">
+		<div>
+			<p class="eyebrow">External Records</p>
+			<h3>{isLoadingRecords ? 'Loading records...' : `${records.length} external record${records.length === 1 ? '' : 's'}`}</h3>
+			<p class="page-copy">
+				Use these entries for OneDrive links, shared locations, or future server URLs that should stay attached
+				to this same session workspace.
+			</p>
+		</div>
+
+		{#if !session?.experiment_plan_id}
+			<button
+				type="button"
+				class="secondary-button dark-button"
+				onclick={ensurePlanForRecords}
+				disabled={isCreatingPlan}
+			>
+				{isCreatingPlan ? 'Creating plan...' : 'Create plan for records'}
+			</button>
+		{/if}
+	</div>
+
+	{#if recordMessage}
+		<p class="status-banner">{recordMessage}</p>
+	{/if}
+
+	{#if recordError}
+		<p class="status-banner error">{recordError}</p>
+	{/if}
+
+	<div class="asset-record-composer">
+		<label class="form-field">
+			<span>URL / path</span>
+			<input
+				type="text"
+				placeholder="https://onedrive.live.com/... or future server path"
+				value={draftRecordLocation}
+				oninput={(event) => {
+					draftRecordLocation = (event.currentTarget as HTMLInputElement).value;
+				}}
+			/>
+		</label>
+
+		<div class="form-actions">
+			<button type="button" class="primary-button" onclick={addRecord} disabled={isCreatingRecord}>
+				{isCreatingRecord ? 'Adding...' : 'Add external record'}
+			</button>
+		</div>
+	</div>
+
+	{#if !records.length && !isLoadingRecords}
+		<p class="empty-state">No external records are attached to this session yet.</p>
+	{:else}
+		<div class="session-file-list">
+			{#each records as record (record.id)}
+				<article class="data-record-card session-file-card">
+					<div class="session-file-card-header">
+						<div>
+							<h4>Record #{record.id}</h4>
+							<p class="record-meta">
+								Owner {record.owner_id} · Added {record.create_at ? new Date(record.create_at).toLocaleString() : 'Pending'}
+							</p>
+						</div>
+
+						<div class="record-actions">
+							{#if looksLikeUrl(record.file_path)}
+								<a class="secondary-button soft-button" href={record.file_path} target="_blank" rel="noreferrer">
+									Open
+								</a>
+							{/if}
+						</div>
+					</div>
+
+					<div class="session-file-metadata-grid">
+						<div class="step-summary-item">
+							<span>Record type</span>
+							<strong>External URL / path</strong>
+						</div>
+						<div class="step-summary-item">
+							<span>Plan</span>
+							<strong>{record.experiment_plan ?? 'Not linked'}</strong>
+						</div>
+						<div class="step-summary-item session-file-metadata-span-2">
+							<span>Location</span>
+							<strong class="truncated-inline" title={record.file_path}>{record.file_path}</strong>
+						</div>
+					</div>
+
+					<label class="form-field">
+						<span>URL / path</span>
+						<input
+							type="text"
+							value={record.file_path}
+							oninput={(event) => setRecordPath(record.id, (event.currentTarget as HTMLInputElement).value)}
+						/>
+					</label>
+
+					<div class="record-actions">
+						<button
+							type="button"
+							class="primary-button"
+							onclick={() => saveRecord(record.id)}
+							disabled={savingRecordIds[String(record.id)]}
+						>
+							{savingRecordIds[String(record.id)] ? 'Saving...' : 'Save'}
+						</button>
+						<button
+							type="button"
+							class="secondary-button danger-button"
+							onclick={() => removeRecord(record.id)}
+							disabled={deletingRecordIds[String(record.id)]}
+						>
+							{deletingRecordIds[String(record.id)] ? 'Deleting...' : 'Delete'}
+						</button>
+					</div>
 				</article>
 			{/each}
 		</div>
