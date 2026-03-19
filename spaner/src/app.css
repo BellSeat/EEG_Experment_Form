@@ -552,6 +552,29 @@ select {
 	margin-bottom: 1rem;
 }
 
+.step-preset-chip {
+	display: grid;
+	gap: 0.35rem;
+	justify-items: start;
+}
+
+.step-preset-actions {
+	display: flex;
+	flex-wrap: wrap;
+	gap: 0.65rem;
+	padding-left: 0.3rem;
+}
+
+.preset-editor-card {
+	display: grid;
+	gap: 1rem;
+	margin-bottom: 1rem;
+	padding: 1rem;
+	border-radius: 1rem;
+	border: 1px solid rgba(183, 165, 122, 0.26);
+	background: rgba(255, 255, 255, 0.82);
+}
+
 .step-form-grid {
 	grid-template-columns: repeat(3, minmax(0, 1fr));
 }

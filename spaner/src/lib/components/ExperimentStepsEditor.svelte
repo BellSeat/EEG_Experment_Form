@@ -1,4 +1,5 @@
 <script lang="ts">
+	import { browser } from '$app/environment';
 	import { untrack } from 'svelte';
 	import { currentUser } from '$lib/auth';
 	import {
@@ -15,6 +16,7 @@
 	type SessionPatchedHandler = (session: Session) => void;
 
 	type StepPreset = {
+		id: string;
 		label: string;
 		duration_seconds: number;
 		sets: number;
@@ -34,11 +36,12 @@
 		sets: number | null;
 	};
 
-	const STEP_PRESETS: StepPreset[] = [
-		{ label: 'Relax', duration_seconds: 30, sets: 1 },
-		{ label: 'Finger extend', duration_seconds: 5, sets: 10 },
-		{ label: 'Fist', duration_seconds: 5, sets: 10 },
-		{ label: 'Rest', duration_seconds: 10, sets: 1 },
+	const PRESET_STORAGE_KEY = 'spaner.procedure-step-presets.v1';
+	const DEFAULT_STEP_PRESETS: StepPreset[] = [
+		{ id: 'relax', label: 'Relax', duration_seconds: 30, sets: 1 },
+		{ id: 'finger-extend', label: 'Finger extend', duration_seconds: 5, sets: 10 },
+		{ id: 'fist', label: 'Fist', duration_seconds: 5, sets: 10 },
+		{ id: 'rest', label: 'Rest', duration_seconds: 10, sets: 1 },
 	];
 
 	let {
@@ -54,6 +57,7 @@
 	let isLoading = $state(false);
 	let isCreatingPlan = $state(false);
 	let isPersistingChanges = $state(false);
+	let isManagingPresets = $state(false);
 	let message = $state('');
 	let errorMessage = $state('');
 	let exportMessage = $state('');
@@ -63,6 +67,13 @@
 	let editingStepIds = $state<Record<string, boolean>>({});
 	let persistedSteps = $state<StepEditorModel[]>([]);
 	let steps = $state<StepEditorModel[]>([]);
+	let stepPresets = $state<StepPreset[]>(DEFAULT_STEP_PRESETS);
+	let editingPresetId = $state<string | null>(null);
+	let presetDraft = $state<Pick<StepPreset, 'label' | 'duration_seconds' | 'sets'>>({
+		label: '',
+		duration_seconds: 10,
+		sets: 1,
+	});
 	let draftStep = $state<StepEditorModel>({
 		id: 'draft-0',
 		order_of_step: 1,
@@ -82,6 +93,11 @@
 	function nextDraftId(): `draft-${string}` {
 		draftSequence += 1;
 		return `draft-${Date.now()}-${draftSequence}`;
+	}
+
+	function nextPresetId(): string {
+		draftSequence += 1;
+		return `preset-${Date.now()}-${draftSequence}`;
 	}
 
 	function createEmptyDraft(nextOrder: number): StepEditorModel {
@@ -104,6 +120,51 @@
 			return null;
 		}
 		return Math.floor(parsed);
+	}
+
+	function loadStepPresets() {
+		if (!browser) {
+			return;
+		}
+
+		try {
+			const raw = window.localStorage.getItem(PRESET_STORAGE_KEY);
+			if (!raw) {
+				stepPresets = DEFAULT_STEP_PRESETS;
+				return;
+			}
+
+			const parsed = JSON.parse(raw) as Partial<StepPreset>[];
+			const normalized = parsed
+				.map((preset, index) => ({
+					id:
+						typeof preset.id === 'string' && preset.id.trim()
+							? preset.id
+							: `preset-import-${index + 1}`,
+					label: typeof preset.label === 'string' ? preset.label.trim() : '',
+					duration_seconds:
+						typeof preset.duration_seconds === 'number' && Number.isFinite(preset.duration_seconds)
+							? Math.max(1, Math.floor(preset.duration_seconds))
+							: 10,
+					sets:
+						typeof preset.sets === 'number' && Number.isFinite(preset.sets)
+							? Math.max(1, Math.floor(preset.sets))
+							: 1,
+				}))
+				.filter((preset) => preset.label);
+
+			stepPresets = normalized.length ? normalized : DEFAULT_STEP_PRESETS;
+		} catch {
+			stepPresets = DEFAULT_STEP_PRESETS;
+		}
+	}
+
+	function persistStepPresets() {
+		if (!browser) {
+			return;
+		}
+
+		window.localStorage.setItem(PRESET_STORAGE_KEY, JSON.stringify(stepPresets));
 	}
 
 	function normalizeStepPayload(payload: Partial<StepPayload> | null | undefined): StepPayload {
@@ -242,6 +303,92 @@
 			duration_seconds: preset.duration_seconds,
 			sets: preset.sets,
 		};
+	}
+
+	function resetPresetDraft() {
+		presetDraft = {
+			label: '',
+			duration_seconds: 10,
+			sets: 1,
+		};
+		editingPresetId = null;
+	}
+
+	function startPresetEdit(preset: StepPreset) {
+		presetDraft = {
+			label: preset.label,
+			duration_seconds: preset.duration_seconds,
+			sets: preset.sets,
+		};
+		editingPresetId = preset.id;
+	}
+
+	function setPresetDraftField(
+		field: keyof Pick<StepPreset, 'label' | 'duration_seconds' | 'sets'>,
+		value: string,
+	) {
+		if (field === 'duration_seconds' || field === 'sets') {
+			presetDraft = {
+				...presetDraft,
+				[field]: parsePositiveInteger(value) ?? 1,
+			};
+			return;
+		}
+
+		presetDraft = {
+			...presetDraft,
+			[field]: value,
+		};
+	}
+
+	function savePreset() {
+		const label = presetDraft.label.trim();
+		if (!label) {
+			errorMessage = 'Preset label is required.';
+			return;
+		}
+
+		errorMessage = '';
+		message = '';
+
+		if (editingPresetId) {
+			stepPresets = stepPresets.map((preset) =>
+				preset.id === editingPresetId
+					? {
+							...preset,
+							label,
+							duration_seconds: presetDraft.duration_seconds,
+							sets: presetDraft.sets,
+						}
+					: preset,
+			);
+			message = `Updated preset ${label}.`;
+		} else {
+			stepPresets = [
+				...stepPresets,
+				{
+					id: nextPresetId(),
+					label,
+					duration_seconds: presetDraft.duration_seconds,
+					sets: presetDraft.sets,
+				},
+			];
+			message = `Added preset ${label}.`;
+		}
+
+		persistStepPresets();
+		resetPresetDraft();
+	}
+
+	function deletePreset(presetId: string) {
+		const preset = stepPresets.find((entry) => entry.id === presetId);
+		stepPresets = stepPresets.filter((entry) => entry.id !== presetId);
+		persistStepPresets();
+		if (editingPresetId === presetId) {
+			resetPresetDraft();
+		}
+		message = preset ? `Deleted preset ${preset.label}.` : 'Deleted preset.';
+		errorMessage = '';
 	}
 
 	async function ensurePlanForSession(): Promise<EntityId | null> {
@@ -522,6 +669,8 @@
 			void loadSteps(currentPlanId);
 		});
 	});
+
+	loadStepPresets();
 </script>
 
 <section class="content-card procedure-steps-card">
@@ -568,19 +717,100 @@
 					<p class="eyebrow">New Step</p>
 					<h3>Add one procedure step</h3>
 				</div>
-			</div>
-
-			<div class="step-preset-row">
-				{#each STEP_PRESETS as preset}
+				<div class="toolbar-group">
 					<button
 						type="button"
 						class="secondary-button soft-button"
-						onclick={() => applyPresetToDraft(preset)}
+						onclick={() => {
+							isManagingPresets = !isManagingPresets;
+							if (!isManagingPresets) {
+								resetPresetDraft();
+							}
+						}}
 					>
-						{preset.label}
+						{isManagingPresets ? 'Done managing tags' : 'Manage tags'}
 					</button>
+				</div>
+			</div>
+
+			<div class="step-preset-row">
+				{#each stepPresets as preset}
+					<div class="step-preset-chip">
+						<button
+							type="button"
+							class="secondary-button soft-button"
+							onclick={() => applyPresetToDraft(preset)}
+						>
+							{preset.label}
+						</button>
+						{#if isManagingPresets}
+							<div class="step-preset-actions">
+								<button type="button" class="link-button" onclick={() => startPresetEdit(preset)}>
+									Edit
+								</button>
+								<button type="button" class="link-button" onclick={() => deletePreset(preset.id)}>
+									Delete
+								</button>
+							</div>
+						{/if}
+					</div>
 				{/each}
 			</div>
+
+			{#if isManagingPresets}
+				<div class="preset-editor-card">
+					<div class="section-heading">
+						<div>
+							<p class="eyebrow">Preset Tags</p>
+							<h3>{editingPresetId ? 'Update preset tag' : 'Add preset tag'}</h3>
+						</div>
+					</div>
+
+					<div class="form-grid step-form-grid">
+						<label class="form-field">
+							<span>Tag label</span>
+							<input
+								type="text"
+								placeholder="Relax"
+								value={presetDraft.label}
+								oninput={(event) => setPresetDraftField('label', (event.currentTarget as HTMLInputElement).value)}
+							/>
+						</label>
+
+						<label class="form-field">
+							<span>Duration (seconds)</span>
+							<input
+								type="number"
+								min="1"
+								value={presetDraft.duration_seconds}
+								oninput={(event) =>
+									setPresetDraftField('duration_seconds', (event.currentTarget as HTMLInputElement).value)}
+							/>
+						</label>
+
+						<label class="form-field">
+							<span>Repeat sets</span>
+							<input
+								type="number"
+								min="1"
+								value={presetDraft.sets}
+								oninput={(event) => setPresetDraftField('sets', (event.currentTarget as HTMLInputElement).value)}
+							/>
+						</label>
+					</div>
+
+					<div class="form-actions">
+						{#if editingPresetId}
+							<button type="button" class="secondary-button soft-button" onclick={resetPresetDraft}>
+								Cancel
+							</button>
+						{/if}
+						<button type="button" class="primary-button" onclick={savePreset}>
+							{editingPresetId ? 'Update tag' : '+ Add tag'}
+						</button>
+					</div>
+				</div>
+			{/if}
 
 			<div class="form-grid step-form-grid">
 				<label class="form-field">
@@ -618,7 +848,7 @@
 
 			<div class="form-actions">
 				<button type="button" class="primary-button" onclick={addStepLocally} disabled={isPersistingChanges || isLoading}>
-					Add locally
+					+ Add locally
 				</button>
 			</div>
 		</div>
