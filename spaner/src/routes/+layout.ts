@@ -11,7 +11,7 @@ export const load: LayoutLoad = ({ url }) => {
 
 	const { token } = get(auth);
 
-	if (token && url.pathname === '/') {
+	if (token && (url.pathname === '/' || url.pathname === '/register')) {
 		throw redirect(303, '/dashboard');
 	}
 };

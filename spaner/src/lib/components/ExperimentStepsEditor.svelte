@@ -400,12 +400,17 @@
 			errorMessage = 'A signed-in researcher and an active session are required before saving procedure steps.';
 			return null;
 		}
+		if (session.subject_id === null || session.subject_id === undefined) {
+			errorMessage = 'This session is not linked to a lobby, so a plan cannot be created yet.';
+			return null;
+		}
 
 		isCreatingPlan = true;
 		errorMessage = '';
 
 		try {
 			const createdPlan = await createExperimentPlan({
+				subject_id: session.subject_id,
 				owner_id: $currentUser.id,
 				name: `${getSessionLabel(session)} Plan`,
 				description: `Procedure steps for session ${session.id}.`,

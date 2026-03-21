@@ -6,9 +6,10 @@ import type {
 	ApiListResponse,
 	AuditLogEntry,
 	AuthUser,
-	EntityId,
+	CollaboratorRole,
 	EegMap,
 	EegMapUpsertPayload,
+	EntityId,
 	ExperimentData,
 	ExperimentDataCreatePayload,
 	ExperimentDataUpdatePayload,
@@ -19,16 +20,32 @@ import type {
 	ExperimentStep,
 	ExperimentStepCreatePayload,
 	ExperimentStepUpdatePayload,
+	InvitationStatus,
 	LoginRequest,
 	LoginResponse,
+	RegisterRequest,
+	RegisterResponse,
 	Session,
 	SessionCreatePayload,
 	SessionFile,
-	SessionFileUploadPayload,
 	SessionFileUpdatePayload,
+	SessionFileUploadPayload,
+	SessionHandoverPayload,
+	SessionInvitation,
+	SessionInvitationCreatePayload,
+	SessionMember,
+	SessionMemberCreatePayload,
+	SessionMemberUpdatePayload,
 	SessionUpdatePayload,
 	Subject,
 	SubjectCreatePayload,
+	SubjectInvitation,
+	SubjectInvitationCreatePayload,
+	SubjectMember,
+	SubjectMemberCreatePayload,
+	SubjectMemberUpdatePayload,
+	TransferOwnershipPayload,
+	UserDirectoryEntry,
 	UserRole,
 } from './types';
 
@@ -131,6 +148,12 @@ function normalizeUser(payload: Partial<AuthUser> | undefined, fallback: RawLogi
 		email: payload?.email ?? fallback.email ?? '',
 		role,
 		display_name: payload?.display_name ?? null,
+		global_role: payload?.global_role ?? null,
+		status: payload?.status ?? null,
+		is_active: payload?.is_active ?? null,
+		last_login_at: payload?.last_login_at ?? null,
+		created_at: payload?.created_at ?? null,
+		updated_at: payload?.updated_at ?? null,
 	};
 }
 
@@ -225,9 +248,7 @@ export async function apiUpload<T>(path: string, formData: FormData): Promise<T>
 export async function login(request: LoginRequest): Promise<LoginResponse> {
 	const response = await fetch(apiUrl('/auth/login'), {
 		method: 'POST',
-		headers: {
-			'Content-Type': 'application/json',
-		},
+		headers: { 'Content-Type': 'application/json' },
 		body: JSON.stringify(request),
 	});
 
@@ -238,16 +259,99 @@ export async function login(request: LoginRequest): Promise<LoginResponse> {
 	return normalizeLoginResponse((await response.json()) as RawLoginResponse);
 }
 
+export async function register(request: RegisterRequest): Promise<RegisterResponse> {
+	const response = await fetch(apiUrl('/auth/register'), {
+		method: 'POST',
+		headers: { 'Content-Type': 'application/json' },
+		body: JSON.stringify(request),
+	});
+
+	if (!response.ok) {
+		throw new ApiError(await parseErrorMessage(response), response.status);
+	}
+
+	if (response.status === 204) {
+		return {};
+	}
+
+	return (await response.json()) as RegisterResponse;
+}
+
+export async function searchUsers(query: string, limit = 20): Promise<UserDirectoryEntry[]> {
+	const normalized = query.trim();
+	if (!normalized) {
+		return [];
+	}
+	return apiFetch<UserDirectoryEntry[]>(
+		`/users/search?q=${encodeURIComponent(normalized)}&limit=${encodeURIComponent(String(limit))}`,
+	);
+}
+
 export async function getSubjects(): Promise<ApiListResponse<Subject>> {
 	return normalizeListResponse(await apiFetch<ListPayload<Subject>>('/subjects'));
+}
+
+export async function getSubject(subjectId: EntityId): Promise<Subject> {
+	return apiFetch<Subject>(`/subjects/${subjectId}`);
 }
 
 export async function createSubject(payload: SubjectCreatePayload): Promise<Subject> {
 	return apiJson<Subject>('/subjects', 'POST', payload);
 }
 
-export async function getSessions(): Promise<ApiListResponse<Session>> {
-	return normalizeListResponse(await apiFetch<ListPayload<Session>>('/sessions'));
+export async function getSubjectMembers(subjectId: EntityId): Promise<SubjectMember[]> {
+	return apiFetch<SubjectMember[]>(`/subjects/${subjectId}/members`);
+}
+
+export async function addSubjectMember(
+	subjectId: EntityId,
+	payload: SubjectMemberCreatePayload,
+): Promise<SubjectMember> {
+	return apiJson<SubjectMember>(`/subjects/${subjectId}/members`, 'POST', payload);
+}
+
+export async function updateSubjectMember(
+	subjectId: EntityId,
+	userId: EntityId,
+	payload: SubjectMemberUpdatePayload,
+): Promise<SubjectMember> {
+	return apiJson<SubjectMember>(`/subjects/${subjectId}/members/${userId}`, 'PATCH', payload);
+}
+
+export async function deleteSubjectMember(subjectId: EntityId, userId: EntityId): Promise<void> {
+	return apiJson<void>(`/subjects/${subjectId}/members/${userId}`, 'DELETE');
+}
+
+export async function getSubjectInvitations(
+	subjectId: EntityId,
+	status?: InvitationStatus,
+): Promise<SubjectInvitation[]> {
+	const path = status
+		? `/subjects/${subjectId}/invitations?status=${encodeURIComponent(status)}`
+		: `/subjects/${subjectId}/invitations`;
+	return apiFetch<SubjectInvitation[]>(path);
+}
+
+export async function createSubjectInvitation(
+	subjectId: EntityId,
+	payload: SubjectInvitationCreatePayload,
+): Promise<SubjectInvitation> {
+	return apiJson<SubjectInvitation>(`/subjects/${subjectId}/invitations`, 'POST', payload);
+}
+
+export async function transferSubjectOwnership(
+	subjectId: EntityId,
+	payload: TransferOwnershipPayload,
+): Promise<Subject> {
+	return apiJson<Subject>(`/subjects/${subjectId}/transfer-ownership`, 'POST', payload);
+}
+
+export async function getSessions(subjectId?: EntityId): Promise<ApiListResponse<Session>> {
+	const path =
+		subjectId === undefined
+			? '/sessions'
+			: `/sessions?subject_id=${encodeURIComponent(String(subjectId))}`;
+	return normalizeListResponse(await apiFetch<ListPayload<Session>>(path));
 }
 
 export async function createSession(payload: SessionCreatePayload): Promise<Session> {
@@ -262,28 +366,70 @@ export async function updateSession(sessionId: EntityId, payload: SessionUpdateP
 	return apiJson<Session>(`/sessions/${sessionId}`, 'PUT', payload);
 }
 
+export async function handoverSession(
+	sessionId: EntityId,
+	payload: SessionHandoverPayload,
+): Promise<Session> {
+	return apiJson<Session>(`/sessions/${sessionId}/handover`, 'POST', payload);
+}
+
+export async function getSessionMembers(sessionId: EntityId): Promise<SessionMember[]> {
+	return apiFetch<SessionMember[]>(`/sessions/${sessionId}/members`);
+}
+
+export async function addSessionMember(
+	sessionId: EntityId,
+	payload: SessionMemberCreatePayload,
+): Promise<SessionMember> {
+	return apiJson<SessionMember>(`/sessions/${sessionId}/members`, 'POST', payload);
+}
+
+export async function updateSessionMember(
+	sessionId: EntityId,
+	userId: EntityId,
+	payload: SessionMemberUpdatePayload,
+): Promise<SessionMember> {
+	return apiJson<SessionMember>(`/sessions/${sessionId}/members/${userId}`, 'PATCH', payload);
+}
+
+export async function deleteSessionMember(sessionId: EntityId, userId: EntityId): Promise<void> {
+	return apiJson<void>(`/sessions/${sessionId}/members/${userId}`, 'DELETE');
+}
+
+export async function getSessionInvitations(
+	sessionId: EntityId,
+	status?: InvitationStatus,
+): Promise<SessionInvitation[]> {
+	const path = status
+		? `/sessions/${sessionId}/invitations?status=${encodeURIComponent(status)}`
+		: `/sessions/${sessionId}/invitations`;
+	return apiFetch<SessionInvitation[]>(path);
+}
+
+export async function createSessionInvitation(
+	sessionId: EntityId,
+	payload: SessionInvitationCreatePayload,
+): Promise<SessionInvitation> {
+	return apiJson<SessionInvitation>(`/sessions/${sessionId}/invitations`, 'POST', payload);
+}
+
+async function fetchSessionFilesBySession(sessionId: EntityId): Promise<ApiListResponse<SessionFile>> {
+	return normalizeListResponse(await apiFetch<ListPayload<SessionFile>>(`/sessions/${sessionId}/files`));
+}
+
 export async function getSessionFiles(sessionId?: EntityId): Promise<ApiListResponse<SessionFile>> {
-	const path = sessionId === undefined ? '/session_files' : `/sessions/${sessionId}/files`;
-	return normalizeListResponse(await apiFetch<ListPayload<SessionFile>>(path));
+	if (sessionId === undefined) {
+		return getAllSessionFiles();
+	}
+	return fetchSessionFilesBySession(sessionId);
 }
 
 export async function getAllSessionFiles(): Promise<ApiListResponse<SessionFile>> {
-	try {
-		const response = await getSessionFiles();
-		if (response.items.length > 0) {
-			return response;
-		}
-	} catch (error) {
-		if (!(error instanceof ApiError) || error.status !== 404) {
-			throw error;
-		}
-	}
-
 	const sessions = await getSessions();
 	const fileLists = await Promise.all(
 		sessions.items.map(async (session) => {
 			try {
-				const response = await getSessionFiles(session.id);
+				const response = await fetchSessionFilesBySession(session.id);
 				return response.items;
 			} catch (error) {
 				if (error instanceof ApiError && error.status === 404) {
@@ -295,10 +441,7 @@ export async function getAllSessionFiles(): Promise<ApiListResponse<SessionFile>
 	);
 
 	const items = fileLists.flat();
-	return {
-		items,
-		total: items.length,
-	};
+	return { items, total: items.length };
 }
 
 export async function uploadSessionFile(
@@ -319,42 +462,24 @@ export async function uploadSessionFile(
 export async function updateSessionFile(
 	fileId: EntityId,
 	payload: SessionFileUpdatePayload,
-	sessionId?: EntityId,
 ): Promise<SessionFile> {
-	try {
-		return await apiJson<SessionFile>(`/session_files/${fileId}`, 'PUT', payload);
-	} catch (error) {
-		if (error instanceof ApiError && error.status === 404 && sessionId !== undefined) {
-			return apiJson<SessionFile>(`/sessions/${sessionId}/files/${fileId}`, 'PUT', payload);
-		}
-		throw error;
-	}
+	return apiJson<SessionFile>(`/session-files/${fileId}`, 'PUT', payload);
 }
 
-export async function deleteSessionFile(fileId: EntityId, sessionId?: EntityId): Promise<void> {
-	try {
-		return await apiJson<void>(`/session_files/${fileId}`, 'DELETE');
-	} catch (error) {
-		if (error instanceof ApiError && error.status === 404 && sessionId !== undefined) {
-			return apiJson<void>(`/sessions/${sessionId}/files/${fileId}`, 'DELETE');
-		}
-		throw error;
-	}
+export async function deleteSessionFile(fileId: EntityId): Promise<void> {
+	return apiJson<void>(`/session-files/${fileId}`, 'DELETE');
 }
 
 export function resolveStorageUrl(path?: string | null): string | null {
 	if (!path) {
 		return null;
 	}
-
 	if (/^https?:\/\//i.test(path)) {
 		return path;
 	}
-
 	if (path.startsWith('/')) {
 		return `${API_BASE}${path}`;
 	}
-
 	return `${API_BASE}/${path.replace(/^\/+/, '')}`;
 }
 
@@ -376,8 +501,12 @@ export async function getExperimentPlan(planId: EntityId): Promise<ExperimentPla
 	return apiFetch<ExperimentPlan>(`/experiment-plans/${planId}`);
 }
 
-export async function getExperimentPlans(): Promise<ApiListResponse<ExperimentPlan>> {
-	return normalizeListResponse(await apiFetch<ListPayload<ExperimentPlan>>('/experiment-plans'));
+export async function getExperimentPlans(subjectId?: EntityId): Promise<ApiListResponse<ExperimentPlan>> {
+	const path =
+		subjectId === undefined
+			? '/experiment-plans'
+			: `/experiment-plans?subject_id=${encodeURIComponent(String(subjectId))}`;
+	return normalizeListResponse(await apiFetch<ListPayload<ExperimentPlan>>(path));
 }
 
 export async function getExperimentPlanDetail(planId: EntityId): Promise<ExperimentPlanDetail> {
@@ -417,17 +546,6 @@ export async function getExperimentData(experimentPlanId?: EntityId): Promise<Ap
 }
 
 export async function getAllExperimentData(): Promise<ApiListResponse<ExperimentData>> {
-	try {
-		const response = await getExperimentData();
-		if (response.items.length > 0) {
-			return response;
-		}
-	} catch (error) {
-		if (!(error instanceof ApiError) || error.status !== 404) {
-			throw error;
-		}
-	}
-
 	const sessions = await getSessions();
 	const planIds = [
 		...new Set(
@@ -436,6 +554,7 @@ export async function getAllExperimentData(): Promise<ApiListResponse<Experiment
 				.filter((planId): planId is EntityId => planId !== null && planId !== undefined),
 		),
 	];
+
 	const recordLists = await Promise.all(
 		planIds.map(async (planId) => {
 			try {
@@ -451,10 +570,7 @@ export async function getAllExperimentData(): Promise<ApiListResponse<Experiment
 	);
 
 	const items = [...new Map(recordLists.flat().map((record) => [String(record.id), record])).values()];
-	return {
-		items,
-		total: items.length,
-	};
+	return { items, total: items.length };
 }
 
 export async function createExperimentData(
@@ -484,4 +600,8 @@ export async function getEegMap(mapId: EntityId): Promise<EegMap> {
 
 export async function updateEegMap(mapId: EntityId, payload: EegMapUpsertPayload): Promise<EegMap> {
 	return apiJson<EegMap>(`/eeg-maps/${mapId}`, 'PUT', payload);
+}
+
+export function roleOptions(): CollaboratorRole[] {
+	return ['owner', 'admin', 'editor', 'uploader', 'viewer'];
 }

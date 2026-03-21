@@ -12,6 +12,10 @@
 	let isSubmitting = $state(false);
 	let errorMessage = $state('');
 
+	function openRegistration() {
+		goto('/register');
+	}
+
 	async function handleSubmit(event: SubmitEvent) {
 		event.preventDefault();
 		errorMessage = '';
@@ -92,7 +96,7 @@
 					<button type="submit" class="button-primary" disabled={isSubmitting}>
 						{isSubmitting ? 'Signing in...' : 'Login'}
 					</button>
-					<button type="button" class="button-secondary">Sign Up</button>
+					<button type="button" class="button-secondary" onclick={openRegistration}>Sign Up</button>
 				</div>
 
 				<div class="alt-login">

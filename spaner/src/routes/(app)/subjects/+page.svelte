@@ -63,8 +63,9 @@
 			<table class="data-table">
 				<thead>
 					<tr>
-						<th>Code</th>
+						<th>Lobby</th>
 						<th>Status</th>
+						<th>Your Role</th>
 						<th>Notes</th>
 						<th>Updated</th>
 					</tr>
@@ -72,8 +73,11 @@
 				<tbody>
 					{#each subjects as subject}
 						<tr>
-							<td>{subjectLabel(subject)}</td>
+							<td>
+								<a href={`/subjects/${subject.id}`} class="text-link">{subjectLabel(subject)}</a>
+							</td>
 							<td><span class="role-badge">{subject.status}</span></td>
+							<td>{subject.current_user_role ?? 'member'}</td>
 							<td>{subject.notes ?? subject.description ?? 'No notes'}</td>
 							<td>{formatDate(subject.updated_at ?? subject.created_at)}</td>
 						</tr>

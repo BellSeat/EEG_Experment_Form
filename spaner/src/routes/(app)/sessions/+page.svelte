@@ -66,7 +66,7 @@
 				<thead>
 					<tr>
 						<th>Title</th>
-						<th>Subject</th>
+						<th>Lobby</th>
 						<th>Status</th>
 						<th>Files</th>
 						<th>Recorded</th>
@@ -78,7 +78,11 @@
 							<td>
 								<a href={`/sessions/${session.id}`} class="text-link">{getSessionLabel(session)}</a>
 							</td>
-							<td>{session.subject?.subject_code ?? session.subject?.code ?? session.subject_id}</td>
+							<td>
+								<a href={`/subjects/${session.subject_id}`} class="text-link">
+									{session.subject?.subject_code ?? session.subject?.code ?? `Lobby ${session.subject_id}`}
+								</a>
+							</td>
 							<td><span class="role-badge">{session.status}</span></td>
 							<td>{session.file_count ?? 0}</td>
 							<td>{formatDate(session.session_date ?? session.recorded_at)}</td>

@@ -90,6 +90,7 @@
 }
 
 .portal-page input[type="text"],
+.portal-page input[type="email"],
 .portal-page input[type="password"] {
   width: 100%;
   border: 1px solid rgba(183, 165, 122, 0.42);
@@ -103,7 +104,8 @@
     box-shadow 0.2s ease;
 }
 
-.portal-page input[type="text"] {
+.portal-page input[type="text"],
+.portal-page input[type="email"] {
   border-left: 3px solid var(--color-royal-violet);
 }
 
@@ -165,6 +167,11 @@
 .portal-page .form-message.error {
   background: rgba(50, 0, 110, 0.12);
   color: var(--color-deep-violet);
+}
+
+.portal-page .form-message.success {
+  background: rgba(255, 199, 0, 0.18);
+  color: var(--color-black);
 }
 
 .portal-page button {

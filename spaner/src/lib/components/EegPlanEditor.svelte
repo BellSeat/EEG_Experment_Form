@@ -186,6 +186,10 @@
 			planError = 'A signed-in researcher is required before creating an experiment plan.';
 			return;
 		}
+		if (session.subject_id === null || session.subject_id === undefined) {
+			planError = 'This session is not linked to a lobby, so a plan cannot be created yet.';
+			return;
+		}
 
 		isCreatingPlan = true;
 		planError = '';
@@ -193,6 +197,7 @@
 
 		try {
 			const createdPlan = await createExperimentPlan({
+				subject_id: session.subject_id,
 				owner_id: $currentUser.id,
 				name: `${getSessionLabel(session)} Plan`,
 				description: `EEG experiment plan for session ${session.id}.`,

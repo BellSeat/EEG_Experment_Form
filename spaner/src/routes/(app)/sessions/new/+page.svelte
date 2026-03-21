@@ -18,40 +18,63 @@
 	let notes = $state('');
 
 	function subjectLabel(subject: Subject) {
-		return subject.subject_code ?? subject.code ?? `Subject ${subject.id}`;
+		return subject.subject_code ?? subject.code ?? `Lobby ${subject.id}`;
 	}
 
 	function planLabel(plan: ExperimentPlan) {
 		return plan.name?.trim() ? plan.name : `Plan #${plan.id}`;
 	}
 
+	function creatableSubjects() {
+		return subjects.filter((subject) => subject.current_user_capabilities.includes('session:create'));
+	}
+
 	function toIsoDateTime(value: string): string {
 		return new Date(value).toISOString();
 	}
 
-	onMount(async () => {
+	async function loadSubjectScopedOptions(subjectId: string) {
+		if (!subjectId) {
+			plans = [];
+			selectedPlanId = '';
+			return;
+		}
+
+		const planResponse = await getExperimentPlans(subjectId).catch(() => ({ items: [], total: 0 }));
+		plans = planResponse.items;
+		if (!planResponse.items.some((plan) => String(plan.id) === selectedPlanId)) {
+			selectedPlanId = '';
+		}
+	}
+
+	async function loadForm() {
 		isLoading = true;
 		errorMessage = '';
 
 		try {
-			const [subjectResponse, planResponse] = await Promise.all([
-				getSubjects(),
-				getExperimentPlans().catch(() => ({ items: [], total: 0 })),
-			]);
-
+			const subjectResponse = await getSubjects();
 			subjects = subjectResponse.items;
-			plans = planResponse.items;
-			selectedSubjectId = subjectResponse.items[0] ? String(subjectResponse.items[0].id) : '';
+			selectedSubjectId = creatableSubjects()[0] ? String(creatableSubjects()[0].id) : '';
 
 			const now = new Date();
 			now.setMinutes(now.getMinutes() - now.getTimezoneOffset());
 			sessionDate = now.toISOString().slice(0, 16);
+
+			if (!selectedSubjectId) {
+				plans = [];
+				errorMessage = 'No lobby with session create access is available right now.';
+				return;
+			}
+
+			await loadSubjectScopedOptions(selectedSubjectId);
 		} catch (error) {
 			errorMessage = error instanceof Error ? error.message : 'Unable to load session form options.';
 		} finally {
 			isLoading = false;
 		}
-	});
+	}
+
+	onMount(loadForm);
 
 	async function handleSubmit(event: SubmitEvent) {
 		event.preventDefault();
@@ -61,9 +84,8 @@
 			errorMessage = 'You need to be signed in before creating a session.';
 			return;
 		}
-
 		if (!selectedSubjectId) {
-			errorMessage = 'Choose a subject before creating the session.';
+			errorMessage = 'Choose a lobby before creating the session.';
 			return;
 		}
 
@@ -97,10 +119,7 @@
 	<div>
 		<p class="eyebrow">Sessions</p>
 		<h2>Create a new session</h2>
-		<p class="page-copy">
-			Set the subject, operator, date, and optional experiment plan. After save, you will land on the new
-			session workspace.
-		</p>
+		<p class="page-copy">Choose the lobby first, then set the operator, date, and optional experiment plan.</p>
 	</div>
 	<div class="page-actions">
 		<a href="/sessions" class="secondary-link-button">Back to Sessions</a>
@@ -115,17 +134,25 @@
 	<div class="section-heading">
 		<div>
 			<p class="eyebrow">Session Form</p>
-			<h3>{isLoading ? 'Loading form data...' : 'New recording session'}</h3>
+			<h3>{isLoading ? 'Loading form data...' : 'New session'}</h3>
 		</div>
 	</div>
 
 	<form class="session-form" onsubmit={handleSubmit}>
 		<div class="form-grid">
 			<label class="form-field">
-				<span class="field-caption">Subject</span>
-				<select bind:value={selectedSubjectId} required disabled={isLoading || !subjects.length}>
-					<option value="" disabled selected={!selectedSubjectId}>Select subject</option>
-					{#each subjects as subject}
+				<span class="field-caption">Lobby</span>
+				<select
+					bind:value={selectedSubjectId}
+					required
+					disabled={isLoading || !creatableSubjects().length}
+					onchange={() => {
+						errorMessage = '';
+						void loadSubjectScopedOptions(selectedSubjectId);
+					}}
+				>
+					<option value="" disabled selected={!selectedSubjectId}>Select lobby</option>
+					{#each creatableSubjects() as subject}
 						<option value={String(subject.id)}>{subjectLabel(subject)}</option>
 					{/each}
 				</select>
@@ -142,12 +169,7 @@
 
 			<label class="form-field">
 				<span class="field-caption">Session Label</span>
-				<input
-					type="text"
-					placeholder="Example: Baseline EEG Visit"
-					bind:value={sessionLabel}
-					required
-				/>
+				<input type="text" placeholder="Example: Baseline EEG Visit" bind:value={sessionLabel} required />
 			</label>
 
 			<label class="form-field">
@@ -157,7 +179,7 @@
 
 			<label class="form-field">
 				<span class="field-caption">Experiment Plan</span>
-				<select bind:value={selectedPlanId}>
+				<select bind:value={selectedPlanId} disabled={isLoading || !selectedSubjectId}>
 					<option value="">No plan linked yet</option>
 					{#each plans as plan}
 						<option value={String(plan.id)}>{planLabel(plan)}</option>
@@ -179,16 +201,12 @@
 
 		<label class="form-field form-field-full">
 			<span class="field-caption">Notes</span>
-			<textarea
-				rows="5"
-				placeholder="Session context, acquisition notes, or setup details."
-				bind:value={notes}
-			></textarea>
+			<textarea rows="5" placeholder="Session context, acquisition notes, or setup details." bind:value={notes}></textarea>
 		</label>
 
 		<div class="form-actions">
 			<a href="/sessions" class="secondary-link-button">Cancel</a>
-			<button type="submit" class="primary-button" disabled={isSubmitting || isLoading || !$currentUser}>
+			<button type="submit" class="primary-button" disabled={isSubmitting || isLoading || !$currentUser || !selectedSubjectId}>
 				{isSubmitting ? 'Creating...' : 'Create Session'}
 			</button>
 		</div>

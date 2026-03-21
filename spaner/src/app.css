@@ -4,6 +4,7 @@
 	font-family: 'Segoe UI', 'Helvetica Neue', Arial, sans-serif;
 	color: #000000;
 	background: #ffffff;
+	--app-sidebar-width: clamp(260px, 22vw, 300px);
 	--color-black: #000000;
 	--color-white: #ffffff;
 	--color-deep-violet: #32006e;
@@ -54,7 +55,7 @@ select {
 .app-shell {
 	height: 100vh;
 	display: grid;
-	grid-template-columns: minmax(260px, 300px) 1fr;
+	grid-template-columns: var(--app-sidebar-width) minmax(0, 1fr);
 	overflow: hidden;
 }
 
@@ -204,6 +205,30 @@ select {
 	font-weight: 600;
 }
 
+.table-subcopy {
+	margin-top: 0.35rem;
+	color: rgba(0, 0, 0, 0.54);
+	font-size: 0.9rem;
+	line-height: 1.45;
+}
+
+.code-chip {
+	display: inline-flex;
+	align-items: center;
+	padding: 0.35rem 0.65rem;
+	border-radius: 999px;
+	background: rgba(50, 0, 110, 0.08);
+	color: var(--color-deep-violet);
+	font-family: 'Consolas', 'Courier New', monospace;
+	font-size: 0.82rem;
+}
+
+.capability-cell {
+	min-width: 14rem;
+	font-size: 0.92rem;
+	line-height: 1.5;
+}
+
 .primary-link-button,
 .secondary-link-button {
 	display: inline-flex;
@@ -343,6 +368,10 @@ select {
 	gap: 1rem;
 }
 
+.project-overview-grid {
+	align-items: start;
+}
+
 .meta-grid {
 	display: grid;
 	grid-template-columns: repeat(2, minmax(0, 1fr));
@@ -439,6 +468,13 @@ select {
 	padding: 0.9rem 1rem;
 }
 
+.helper-copy {
+	margin: 0;
+	color: rgba(0, 0, 0, 0.62);
+	font-size: 0.92rem;
+	line-height: 1.55;
+}
+
 .form-actions {
 	display: flex;
 	justify-content: end;
@@ -466,6 +502,46 @@ select {
 	flex-wrap: wrap;
 	justify-content: end;
 	gap: 0.75rem;
+}
+
+.helper-panel {
+	margin-top: 1rem;
+	padding: 1rem;
+	border-radius: 1rem;
+	border: 1px solid rgba(183, 165, 122, 0.22);
+	background: linear-gradient(180deg, #fffdf8 0%, #f7f1e6 100%);
+}
+
+.helper-panel span {
+	display: block;
+	margin-bottom: 0.4rem;
+	font-size: 0.76rem;
+	letter-spacing: 0.08em;
+	text-transform: uppercase;
+	color: rgba(50, 0, 110, 0.68);
+}
+
+.helper-panel p {
+	margin: 0;
+	color: rgba(0, 0, 0, 0.72);
+	line-height: 1.55;
+}
+
+.capability-pill-row {
+	display: flex;
+	flex-wrap: wrap;
+	gap: 0.65rem;
+}
+
+.capability-pill {
+	display: inline-flex;
+	align-items: center;
+	padding: 0.45rem 0.75rem;
+	border-radius: 999px;
+	background: rgba(255, 199, 0, 0.16);
+	color: var(--color-deep-violet);
+	font-size: 0.86rem;
+	font-weight: 600;
 }
 
 .session-file-filter-grid {
@@ -725,6 +801,17 @@ select {
 	gap: 0.75rem;
 }
 
+.table-actions {
+	display: flex;
+	flex-wrap: wrap;
+	gap: 0.5rem;
+	justify-content: flex-end;
+}
+
+.member-identity strong {
+	color: var(--color-deep-violet);
+}
+
 .session-file-list,
 .session-file-group-list {
 	display: grid;
@@ -806,6 +893,84 @@ select {
 .danger-button {
 	background: rgba(50, 0, 110, 0.1);
 	color: var(--color-deep-violet);
+}
+
+.modal-backdrop {
+	position: fixed;
+	inset: 0 0 0 var(--app-sidebar-width);
+	z-index: 50;
+	display: grid;
+	place-items: center;
+	padding: 1.25rem;
+	background: rgba(12, 2, 30, 0.45);
+	backdrop-filter: blur(8px);
+}
+
+.modal-card {
+	width: min(100%, 820px);
+	max-height: min(90vh, 1080px);
+	overflow: auto;
+	padding: 1.5rem;
+	border-radius: 1.25rem;
+	border: 1px solid rgba(183, 165, 122, 0.24);
+	background: rgba(255, 253, 247, 0.98);
+	box-shadow: 0 24px 48px rgba(50, 0, 110, 0.18);
+}
+
+.modal-tab-row {
+	display: flex;
+	flex-wrap: wrap;
+	gap: 0.75rem;
+	margin-bottom: 1rem;
+}
+
+.search-panel {
+	display: grid;
+	gap: 1rem;
+}
+
+.search-row {
+	display: grid;
+	grid-template-columns: minmax(0, 1fr) auto;
+	gap: 0.75rem;
+	align-items: end;
+}
+
+.search-result-list {
+	display: grid;
+	gap: 0.75rem;
+	max-height: 16rem;
+	overflow: auto;
+}
+
+.search-result-card {
+	display: grid;
+	grid-template-columns: auto minmax(0, 1fr);
+	gap: 0.9rem;
+	align-items: start;
+	padding: 0.95rem 1rem;
+	border-radius: 1rem;
+	border: 1px solid rgba(183, 165, 122, 0.28);
+	background: rgba(255, 255, 255, 0.86);
+}
+
+.search-result-card input {
+	margin-top: 0.25rem;
+}
+
+.search-result-card strong,
+.search-result-card p {
+	margin: 0;
+}
+
+.search-result-card p {
+	margin-top: 0.25rem;
+	color: rgba(0, 0, 0, 0.6);
+}
+
+.selected-result {
+	border-color: rgba(75, 46, 131, 0.38);
+	box-shadow: 0 12px 28px rgba(50, 0, 110, 0.08);
 }
 
 .eeg-workbench {
@@ -1031,6 +1196,10 @@ select {
 		overflow: visible;
 	}
 
+	.modal-backdrop {
+		inset: 0;
+	}
+
 	.stats-grid,
 	.detail-grid,
 	.plan-summary,
@@ -1074,10 +1243,15 @@ select {
 	.list-row,
 	.step-card-header,
 	.step-row-actions,
+	.table-actions,
 	.record-actions,
 	.session-file-card-header {
 		flex-direction: column;
 		align-items: start;
+	}
+
+	.search-row {
+		grid-template-columns: 1fr;
 	}
 
 	.toggle-inline,

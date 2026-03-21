@@ -20,6 +20,13 @@
 		auth.logout();
 		await goto('/');
 	}
+
+	function isNavActive(pathname: string | undefined, href: string) {
+		if (!pathname) {
+			return false;
+		}
+		return pathname === href || pathname.startsWith(`${href}/`);
+	}
 </script>
 
 <div class="app-shell">
@@ -32,7 +39,7 @@
 
 		<nav class="app-nav" aria-label="Portal navigation">
 			{#each navItems as item}
-				<a href={item.href} class:active={data.pathname === item.href}>{item.label}</a>
+				<a href={item.href} class:active={isNavActive(data.pathname, item.href)}>{item.label}</a>
 			{/each}
 		</nav>
 

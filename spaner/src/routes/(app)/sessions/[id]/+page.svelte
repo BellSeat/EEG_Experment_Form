@@ -12,12 +12,15 @@
 		getSession,
 		getSessionFileLink,
 		getSessionFiles,
+		getSubject,
+		getSubjectMembers,
+		handoverSession,
 		updateExperimentData,
 		updateSession,
 		updateSessionFile,
 		uploadSessionFile,
 	} from '$lib/api';
-	import type { EntityId, ExperimentData, Session, SessionFile } from '$lib/types';
+	import type { EntityId, ExperimentData, Session, SessionFile, Subject, SubjectMember } from '$lib/types';
 
 	type FileMetadataDraft = {
 		file_type: string;
@@ -40,6 +43,8 @@
 	let { data } = $props<{ data: { sessionId: string } }>();
 
 	let session = $state<Session | null>(null);
+	let subject = $state<Subject | null>(null);
+	let subjectMembers = $state<SubjectMember[]>([]);
 	let files = $state<SessionFile[]>([]);
 	let records = $state<ExperimentData[]>([]);
 	let isLoading = $state(true);
@@ -61,6 +66,9 @@
 	let recordError = $state('');
 	let statusMessage = $state('');
 	let statusError = $state('');
+	let collaborationError = $state('');
+	let handoverMessage = $state('');
+	let handoverError = $state('');
 	let fileSearch = $state('');
 	let fileTypeFilter = $state('all');
 	let stageFilter = $state('all');
@@ -73,6 +81,10 @@
 	let metadataDrafts = $state<Record<string, FileMetadataDraft>>({});
 	let savingRecordIds = $state<Record<string, boolean>>({});
 	let deletingRecordIds = $state<Record<string, boolean>>({});
+	let showHandoverModal = $state(false);
+	let isSubmittingHandover = $state(false);
+	let handoverAssignedToUserId = $state('');
+	let handoverOperatorId = $state('');
 	const uploadSuccessMessage = 'Upload completed. The file list has been refreshed.';
 
 	function getSessionLabel(currentSession: Session | null) {
@@ -81,6 +93,32 @@
 
 	function getFileName(file: SessionFile) {
 		return file.file_name ?? file.original_filename ?? file.filename;
+	}
+
+	function memberLabel(member: SubjectMember) {
+		return member.display_name?.trim() || member.username?.trim() || member.email?.trim() || `User #${member.user_id}`;
+	}
+
+	function lookupMember(userId?: EntityId | null) {
+		if (userId === null || userId === undefined) {
+			return null;
+		}
+		return subjectMembers.find((member) => String(member.user_id) === String(userId)) ?? null;
+	}
+
+	function lookupMemberLabel(userId?: EntityId | null) {
+		if (userId === null || userId === undefined) {
+			return 'Not assigned';
+		}
+		return memberLabel(lookupMember(userId) ?? { user_id: userId, permissions: {}, status: 'active', capabilities: [], id: userId, subject_id: subject?.id ?? '', role: 'viewer' });
+	}
+
+	function activeSubjectMembers() {
+		return subjectMembers.filter((member) => member.status === 'active');
+	}
+
+	function canHandoverSession() {
+		return session?.current_user_capabilities.includes('session:handover') ?? false;
 	}
 
 	function looksLikeUrl(value: string): boolean {
@@ -233,16 +271,42 @@
 		}
 	}
 
+	async function loadSubjectContext(subjectId?: EntityId | null) {
+		if (subjectId === null || subjectId === undefined) {
+			subject = null;
+			subjectMembers = [];
+			return;
+		}
+
+		try {
+			const [subjectResponse, memberResponse] = await Promise.all([
+				getSubject(subjectId),
+				getSubjectMembers(subjectId),
+			]);
+			subject = subjectResponse;
+			subjectMembers = memberResponse;
+		} catch (error) {
+			subject = null;
+			subjectMembers = [];
+			collaborationError =
+				error instanceof Error ? error.message : 'Unable to load lobby collaboration context for this session.';
+		}
+	}
+
 	async function loadSessionPage() {
 		isLoading = true;
 		errorMessage = '';
+		collaborationError = '';
 
 		try {
 			const sessionResponse = await getSession(data.sessionId);
 			session = sessionResponse;
 			statusDraft = sessionResponse.status;
 
-			const filesResponse = await getSessionFiles(data.sessionId);
+			const [filesResponse] = await Promise.all([
+				getSessionFiles(data.sessionId),
+				loadSubjectContext(sessionResponse.subject_id),
+			]);
 			files = filesResponse.items;
 
 			if (sessionResponse.experiment_plan_id) {
@@ -314,7 +378,6 @@
 					processing_stage: draft.processing_stage.trim() || null,
 					qc_status: draft.qc_status.trim() || null,
 				},
-				data.sessionId,
 			);
 			files = files.map((entry) => (entry.id === file.id ? updated : entry));
 			stopEditingFile();
@@ -336,7 +399,7 @@
 		fileError = '';
 
 		try {
-			await deleteSessionFile(file.id, data.sessionId);
+			await deleteSessionFile(file.id);
 			files = files.filter((entry) => entry.id !== file.id);
 			if (editingFileId === file.id) {
 				stopEditingFile();
@@ -358,12 +421,17 @@
 			recordError = 'A signed-in researcher and an active session are required before adding external records.';
 			return null;
 		}
+		if (session.subject_id === null || session.subject_id === undefined) {
+			recordError = 'This session is not linked to a lobby, so an experiment plan cannot be created yet.';
+			return null;
+		}
 
 		isCreatingPlan = true;
 		recordError = '';
 
 		try {
 			const createdPlan = await createExperimentPlan({
+				subject_id: session.subject_id,
 				owner_id: $currentUser.id,
 				name: `${getSessionLabel(session)} Plan`,
 				description: `Session assets for session ${session.id}.`,
@@ -493,6 +561,50 @@
 		}
 	}
 
+	function openHandoverModal() {
+		const activeMembers = activeSubjectMembers();
+		handoverAssignedToUserId = String(session?.assigned_to_user_id ?? activeMembers[0]?.user_id ?? '');
+		handoverOperatorId = session?.operator_id ? String(session.operator_id) : '';
+		handoverError = '';
+		showHandoverModal = true;
+	}
+
+	function closeHandoverModal() {
+		showHandoverModal = false;
+		handoverError = '';
+	}
+
+	async function submitHandover(event: SubmitEvent) {
+		event.preventDefault();
+		if (!session) {
+			return;
+		}
+
+		handoverError = '';
+		handoverMessage = '';
+
+		if (!handoverAssignedToUserId) {
+			handoverError = 'Choose a lobby member to receive the session handover.';
+			return;
+		}
+
+		isSubmittingHandover = true;
+		try {
+			const updatedSession = await handoverSession(session.id, {
+				assigned_to_user_id: Number(handoverAssignedToUserId),
+				operator_id: handoverOperatorId ? Number(handoverOperatorId) : null,
+			});
+			session = updatedSession;
+			handoverMessage = `Handed the session to ${lookupMemberLabel(updatedSession.assigned_to_user_id)}.`;
+			await loadSubjectContext(updatedSession.subject_id);
+			closeHandoverModal();
+		} catch (error) {
+			handoverError = error instanceof Error ? error.message : 'Unable to hand over this session.';
+		} finally {
+			isSubmittingHandover = false;
+		}
+	}
+
 	onMount(loadSessionPage);
 
 	$effect(() => {
@@ -516,10 +628,30 @@
 			Experiment planning, EEG channel alignment, managed session files, and external records now share one workspace.
 		</p>
 	</div>
+	<div class="page-actions">
+		{#if session?.subject_id}
+			<a href={`/subjects/${session.subject_id}`} class="secondary-link-button">Open Lobby</a>
+		{/if}
+		{#if canHandoverSession()}
+			<button type="button" class="primary-button" onclick={openHandoverModal}>Session Handover</button>
+		{/if}
+	</div>
 </section>
 
 {#if errorMessage}
 	<p class="status-banner error">{errorMessage}</p>
+{/if}
+
+{#if collaborationError}
+	<p class="status-banner error">{collaborationError}</p>
+{/if}
+
+{#if handoverMessage}
+	<p class="status-banner">{handoverMessage}</p>
+{/if}
+
+{#if handoverError}
+	<p class="status-banner error">{handoverError}</p>
 {/if}
 
 <section class="detail-grid">
@@ -538,7 +670,7 @@
 			</div>
 			<div>
 				<span>Subject</span>
-				<strong>{session?.subject?.code ?? session?.subject_id ?? 'unknown'}</strong>
+				<strong>{subject?.subject_code ?? subject?.code ?? session?.subject_id ?? 'unknown'}</strong>
 			</div>
 			<div>
 				<span>Session Date</span>
@@ -551,6 +683,22 @@
 			<div>
 				<span>Plan</span>
 				<strong>{session?.experiment_plan_id ?? 'Not linked'}</strong>
+			</div>
+			<div>
+				<span>Lobby</span>
+				<strong>{subject?.subject_code ?? subject?.code ?? session?.subject_id ?? 'Not linked'}</strong>
+			</div>
+			<div>
+				<span>Owner</span>
+				<strong>{lookupMemberLabel(session?.owner_user_id)}</strong>
+			</div>
+			<div>
+				<span>Assigned To</span>
+				<strong>{lookupMemberLabel(session?.assigned_to_user_id)}</strong>
+			</div>
+			<div>
+				<span>Operator</span>
+				<strong>{lookupMemberLabel(session?.operator_id)}</strong>
 			</div>
 		</div>
 
@@ -665,6 +813,57 @@
 		{/if}
 	</article>
 </section>
+
+{#if showHandoverModal}
+	<div class="modal-backdrop" role="presentation">
+		<div class="modal-card" role="dialog" aria-modal="true" aria-labelledby="handover-modal-title">
+			<div class="section-heading">
+				<div>
+					<p class="eyebrow">Session Handover</p>
+					<h3 id="handover-modal-title">{getSessionLabel(session)}</h3>
+				</div>
+				<button type="button" class="secondary-button soft-button" onclick={closeHandoverModal}>Close</button>
+			</div>
+
+			<form class="session-form" onsubmit={submitHandover}>
+				<label class="form-field">
+					<span class="field-caption">Assigned researcher</span>
+					<select bind:value={handoverAssignedToUserId} required>
+						<option value="" disabled selected={!handoverAssignedToUserId}>Select a lobby member</option>
+						{#each activeSubjectMembers() as member}
+							<option value={String(member.user_id)}>{memberLabel(member)} ({member.role})</option>
+						{/each}
+					</select>
+				</label>
+
+				<label class="form-field">
+					<span class="field-caption">Operator</span>
+					<select bind:value={handoverOperatorId}>
+						<option value="">Keep current operator</option>
+						{#each activeSubjectMembers() as member}
+							<option value={String(member.user_id)}>{memberLabel(member)} ({member.role})</option>
+						{/each}
+					</select>
+				</label>
+
+				<p class="helper-copy">
+					Session handover targets should already be active members of this lobby so inherited access stays intact.
+				</p>
+
+				{#if handoverError}
+					<p class="status-banner error">{handoverError}</p>
+				{/if}
+
+				<div class="form-actions">
+					<button type="button" class="secondary-button soft-button" onclick={closeHandoverModal}>Cancel</button>
+					<button type="submit" class="primary-button" disabled={isSubmittingHandover}>
+						{isSubmittingHandover ? 'Handing over...' : 'Confirm handover'}
+					</button>
+				</div>
+			</form>
+		</div>
+	</div>
+{/if}
 
 <ExperimentStepsEditor
 	session={session}
