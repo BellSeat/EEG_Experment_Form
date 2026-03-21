@@ -98,11 +98,6 @@
 					</button>
 					<button type="button" class="button-secondary" onclick={openRegistration}>Sign Up</button>
 				</div>
-
-				<div class="alt-login">
-					<span>API target</span>
-					<strong>{import.meta.env.VITE_API_BASE ?? 'http://localhost:8000'}</strong>
-				</div>
 			</form>
 		</section>
 

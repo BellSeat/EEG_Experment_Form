@@ -1,10 +1,11 @@
 <script lang="ts">
 	import { goto } from '$app/navigation';
 	import { ApiError, register } from '$lib/api';
+	import { REGISTRATION_INVITATION_CODE } from '$lib/config';
 	import '$lib/styles/portal-page.css';
 
 	const navItems = ['Home', 'About us', 'Contact', 'GitHub'];
-	const INVITATION_CODE = import.meta.env.VITE_REGISTRATION_INVITATION_CODE ?? 'UWBSPANER@BUNNY';
+	const INVITATION_CODE = REGISTRATION_INVITATION_CODE;
 
 	let displayName = $state('');
 	let username = $state('');
@@ -175,11 +176,6 @@
 						{isSubmitting ? 'Creating account...' : 'Create Account'}
 					</button>
 					<button type="button" class="button-secondary" onclick={goToLogin}>Back to Login</button>
-				</div>
-
-				<div class="alt-login">
-					<span>API target</span>
-					<strong>{import.meta.env.VITE_API_BASE ?? 'http://localhost:8000'}</strong>
 				</div>
 			</form>
 		</section>
