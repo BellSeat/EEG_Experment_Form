@@ -29,7 +29,7 @@ Copy-Item .env.example .env
 npm run dev
 ```
 
-Set `VITE_API_BASE` in `.env` before logging in.
+Set `PUBLIC_API_BASE_URL` in `.env` before logging in.
 
 ## Current scope
 
@@ -98,21 +98,21 @@ See [docs/roadmap.md](./docs/roadmap.md) for the recommended next phase on regis
 
 ## Environment
 
-Set `VITE_API_BASE` so the frontend and backend point at the same API origin.
-The signup screen also supports an optional `VITE_REGISTRATION_INVITATION_CODE` override.
+Set `PUBLIC_API_BASE_URL` so the frontend and backend point at the same API origin.
+The signup screen also supports an optional `PUBLIC_REGISTRATION_INVITATION_CODE` override.
 
 Development example:
 
 ```sh
-VITE_API_BASE=http://localhost:8000
-VITE_REGISTRATION_INVITATION_CODE=UWBSPANER@BUNNY
+PUBLIC_API_BASE_URL=http://localhost:8000
+PUBLIC_REGISTRATION_INVITATION_CODE=UWBSPANER@BUNNY
 ```
 
 Production example:
 
 ```sh
-VITE_API_BASE=https://api.example.com
-VITE_REGISTRATION_INVITATION_CODE=UWBSPANER@BUNNY
+PUBLIC_API_BASE_URL=https://api.spanerlab.com
+PUBLIC_REGISTRATION_INVITATION_CODE=UWBSPANER@BUNNY
 ```
 
 Backend CORS should allow the matching frontend origin for each environment, for example:

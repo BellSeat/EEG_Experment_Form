@@ -136,7 +136,7 @@ Recommended environments:
 
 ### Frontend configuration
 
-- `VITE_API_BASE`
+- `PUBLIC_API_BASE_URL`
 - environment-specific origin and CORS pairing
 
 ### Backend and infrastructure

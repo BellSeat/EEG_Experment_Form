@@ -6,7 +6,7 @@ This document explains what is needed to run the SPANER frontend on a clean Mac 
 
 This repository is the SvelteKit frontend for the SPANER portal.
 
-It does not include the FastAPI backend. If you want the full app experience, the backend API must also be running and reachable through `VITE_API_BASE`.
+It does not include the FastAPI backend. If you want the full app experience, the backend API must also be running and reachable through `PUBLIC_API_BASE_URL`.
 
 ## Minimum system requirements
 
@@ -172,7 +172,7 @@ Copy-Item .env.example .env
 Then set:
 
 ```sh
-VITE_API_BASE=http://localhost:8000
+PUBLIC_API_BASE_URL=http://localhost:8000
 ```
 
 Adjust the value if your FastAPI backend runs on another host or port.
@@ -244,7 +244,7 @@ Fix:
 Cause:
 
 - frontend is running
-- backend is not running or `VITE_API_BASE` is wrong
+- backend is not running or `PUBLIC_API_BASE_URL` is wrong
 
 Fix:
 
@@ -308,7 +308,7 @@ Fix:
 Cause:
 
 - frontend is running locally
-- backend is not running or `VITE_API_BASE` is wrong
+- backend is not running or `PUBLIC_API_BASE_URL` is wrong
 
 Fix:
 
@@ -324,5 +324,5 @@ For a clean Mac or Windows machine, the practical requirements are:
 - `git`
 - `Node.js 20.19+` or `22.12+`
 - `npm`
-- local `.env` with `VITE_API_BASE`
+- local `.env` with `PUBLIC_API_BASE_URL`
 - running FastAPI backend if you want the real app experience

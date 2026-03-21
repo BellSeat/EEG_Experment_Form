@@ -2,6 +2,7 @@ import { browser } from '$app/environment';
 import { goto } from '$app/navigation';
 import { get } from 'svelte/store';
 import { auth } from './auth';
+import { API_BASE } from './config';
 import type {
 	ApiListResponse,
 	AuditLogEntry,
@@ -48,8 +49,6 @@ import type {
 	UserDirectoryEntry,
 	UserRole,
 } from './types';
-
-export const API_BASE = (import.meta.env.VITE_API_BASE ?? 'http://localhost:8000').replace(/\/+$/, '');
 
 export class ApiError extends Error {
 	status: number;
@@ -105,8 +104,27 @@ type RawLoginResponse = {
 	id?: EntityId;
 };
 
+function getApiBase(): string {
+	if (!API_BASE) {
+		throw new ApiError(
+			'API base URL is not configured. Set PUBLIC_API_BASE_URL to your HTTPS API origin, for example https://api.spanerlab.com.',
+			500,
+		);
+	}
+
+	if (browser && window.location.protocol === 'https:' && /^http:\/\//i.test(API_BASE)) {
+		throw new ApiError(
+			`API base URL "${API_BASE}" uses HTTP while this site is loaded over HTTPS. Set PUBLIC_API_BASE_URL to an HTTPS origin, for example https://api.spanerlab.com.`,
+			500,
+		);
+	}
+
+	return API_BASE;
+}
+
 function apiUrl(path: string): string {
-	return path.startsWith('/') ? `${API_BASE}${path}` : `${API_BASE}/${path}`;
+	const apiBase = getApiBase();
+	return path.startsWith('/') ? `${apiBase}${path}` : `${apiBase}/${path}`;
 }
 
 function buildHeaders(token: string | null, headers?: HeadersInit): Headers {
@@ -477,10 +495,11 @@ export function resolveStorageUrl(path?: string | null): string | null {
 	if (/^https?:\/\//i.test(path)) {
 		return path;
 	}
+	const apiBase = getApiBase();
 	if (path.startsWith('/')) {
-		return `${API_BASE}${path}`;
+		return `${apiBase}${path}`;
 	}
-	return `${API_BASE}/${path.replace(/^\/+/, '')}`;
+	return `${apiBase}/${path.replace(/^\/+/, '')}`;
 }
 
 export function getSessionFileLink(file: SessionFile): string | null {
