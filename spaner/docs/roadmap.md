@@ -136,8 +136,8 @@ Recommended environments:
 
 ### Frontend configuration
 
-- `PUBLIC_API_BASE_URL`
-- environment-specific origin and CORS pairing
+- same-origin `PUBLIC_API_BASE_URL=/api`
+- environment-specific proxy target / rewrite pairing
 
 ### Backend and infrastructure
 

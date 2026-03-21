@@ -29,7 +29,7 @@ Copy-Item .env.example .env
 npm run dev
 ```
 
-Set `PUBLIC_API_BASE_URL` in `.env` before logging in.
+The frontend now defaults to the same-origin `/api` proxy.
 
 ## Current scope
 
@@ -98,27 +98,31 @@ See [docs/roadmap.md](./docs/roadmap.md) for the recommended next phase on regis
 
 ## Environment
 
-Set `PUBLIC_API_BASE_URL` so the frontend and backend point at the same API origin.
+The frontend defaults to `PUBLIC_API_BASE_URL=/api`, so the browser always calls the same origin.
 The signup screen also supports an optional `PUBLIC_REGISTRATION_INVITATION_CODE` override.
+For local development, `DEV_API_PROXY_TARGET` tells the Vite dev server which FastAPI instance should receive `/api/*`.
 
 Development example:
 
 ```sh
-PUBLIC_API_BASE_URL=http://localhost:8000
+PUBLIC_API_BASE_URL=/api
 PUBLIC_REGISTRATION_INVITATION_CODE=UWBSPANER@BUNNY
+DEV_API_PROXY_TARGET=http://127.0.0.1:8000
 ```
 
 Production example:
 
 ```sh
-PUBLIC_API_BASE_URL=https://api.spanerlab.com
+PUBLIC_API_BASE_URL=/api
 PUBLIC_REGISTRATION_INVITATION_CODE=UWBSPANER@BUNNY
 ```
 
-Backend CORS should allow the matching frontend origin for each environment, for example:
+In production, Vercel should rewrite `/api/*` to your FastAPI origin. In local development, Vite proxies `/api/*` to `DEV_API_PROXY_TARGET`.
 
-- dev frontend `http://localhost:5173` -> dev API `http://localhost:8000`
-- prod frontend `https://portal.example.com` -> prod API `https://api.example.com`
+Example routing:
+
+- dev browser `http://localhost:5173/api/auth/login` -> local FastAPI `http://127.0.0.1:8000/auth/login`
+- prod browser `https://spanerlab.com/api/auth/login` -> EC2 FastAPI `http://44.246.140.185:8000/auth/login`
 
 ## Local development
 
