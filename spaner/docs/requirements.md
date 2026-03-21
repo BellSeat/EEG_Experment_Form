@@ -174,9 +174,10 @@ Then set:
 ```sh
 PUBLIC_API_BASE_URL=/api
 DEV_API_PROXY_TARGET=http://127.0.0.1:8000
+API_PROXY_TARGET=http://127.0.0.1:8000
 ```
 
-Adjust `DEV_API_PROXY_TARGET` if your FastAPI backend runs on another host or port.
+Adjust `DEV_API_PROXY_TARGET` and `API_PROXY_TARGET` if your FastAPI backend runs on another host or port.
 
 ### 4. Start the frontend
 
@@ -327,4 +328,5 @@ For a clean Mac or Windows machine, the practical requirements are:
 - `npm`
 - local `.env` with `PUBLIC_API_BASE_URL=/api`
 - local `.env` with `DEV_API_PROXY_TARGET`
+- local `.env` with `API_PROXY_TARGET`
 - running FastAPI backend if you want the real app experience

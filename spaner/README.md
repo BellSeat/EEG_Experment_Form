@@ -101,6 +101,7 @@ See [docs/roadmap.md](./docs/roadmap.md) for the recommended next phase on regis
 The frontend defaults to `PUBLIC_API_BASE_URL=/api`, so the browser always calls the same origin.
 The signup screen also supports an optional `PUBLIC_REGISTRATION_INVITATION_CODE` override.
 For local development, `DEV_API_PROXY_TARGET` tells the Vite dev server which FastAPI instance should receive `/api/*`.
+The app also includes a same-origin `/api` server proxy fallback that uses `API_PROXY_TARGET`.
 
 Development example:
 
@@ -108,6 +109,7 @@ Development example:
 PUBLIC_API_BASE_URL=/api
 PUBLIC_REGISTRATION_INVITATION_CODE=UWBSPANER@BUNNY
 DEV_API_PROXY_TARGET=http://127.0.0.1:8000
+API_PROXY_TARGET=http://127.0.0.1:8000
 ```
 
 Production example:
@@ -118,6 +120,7 @@ PUBLIC_REGISTRATION_INVITATION_CODE=UWBSPANER@BUNNY
 ```
 
 In production, Vercel should rewrite `/api/*` to your FastAPI origin. In local development, Vite proxies `/api/*` to `DEV_API_PROXY_TARGET`.
+If the Vercel rewrite is not picked up because of project root settings, the SvelteKit `/api` server route will proxy requests using `API_PROXY_TARGET` instead.
 
 Example routing:
 
