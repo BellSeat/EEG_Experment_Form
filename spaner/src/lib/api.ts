@@ -107,14 +107,14 @@ type RawLoginResponse = {
 function getApiBase(): string {
 	if (!API_BASE) {
 		throw new ApiError(
-			'API base URL is not configured. Set PUBLIC_API_BASE_URL to your HTTPS API origin, for example https://api.spanerlab.com.',
+			'API base URL is not configured. Set PUBLIC_API_BASE_URL or use the default same-origin /api proxy.',
 			500,
 		);
 	}
 
 	if (browser && window.location.protocol === 'https:' && /^http:\/\//i.test(API_BASE)) {
 		throw new ApiError(
-			`API base URL "${API_BASE}" uses HTTP while this site is loaded over HTTPS. Set PUBLIC_API_BASE_URL to an HTTPS origin, for example https://api.spanerlab.com.`,
+			`API base URL "${API_BASE}" uses HTTP while this site is loaded over HTTPS. Use the same-origin /api proxy or set PUBLIC_API_BASE_URL to an HTTPS origin.`,
 			500,
 		);
 	}

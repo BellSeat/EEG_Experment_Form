@@ -6,7 +6,7 @@ This document explains what is needed to run the SPANER frontend on a clean Mac 
 
 This repository is the SvelteKit frontend for the SPANER portal.
 
-It does not include the FastAPI backend. If you want the full app experience, the backend API must also be running and reachable through `PUBLIC_API_BASE_URL`.
+It does not include the FastAPI backend. If you want the full app experience, the backend API must also be running and reachable through the frontend's `/api` proxy.
 
 ## Minimum system requirements
 
@@ -172,10 +172,12 @@ Copy-Item .env.example .env
 Then set:
 
 ```sh
-PUBLIC_API_BASE_URL=http://localhost:8000
+PUBLIC_API_BASE_URL=/api
+DEV_API_PROXY_TARGET=http://127.0.0.1:8000
+API_PROXY_TARGET=http://127.0.0.1:8000
 ```
 
-Adjust the value if your FastAPI backend runs on another host or port.
+Adjust `DEV_API_PROXY_TARGET` and `API_PROXY_TARGET` if your FastAPI backend runs on another host or port.
 
 ### 4. Start the frontend
 
@@ -244,7 +246,7 @@ Fix:
 Cause:
 
 - frontend is running
-- backend is not running or `PUBLIC_API_BASE_URL` is wrong
+- backend is not running or the `/api` proxy target is wrong
 
 Fix:
 
@@ -308,7 +310,7 @@ Fix:
 Cause:
 
 - frontend is running locally
-- backend is not running or `PUBLIC_API_BASE_URL` is wrong
+- backend is not running or the `/api` proxy target is wrong
 
 Fix:
 
@@ -324,5 +326,7 @@ For a clean Mac or Windows machine, the practical requirements are:
 - `git`
 - `Node.js 20.19+` or `22.12+`
 - `npm`
-- local `.env` with `PUBLIC_API_BASE_URL`
+- local `.env` with `PUBLIC_API_BASE_URL=/api`
+- local `.env` with `DEV_API_PROXY_TARGET`
+- local `.env` with `API_PROXY_TARGET`
 - running FastAPI backend if you want the real app experience
